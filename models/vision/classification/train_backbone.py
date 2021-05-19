@@ -17,6 +17,9 @@ from datasets import create_dataset, parse
 from trainer import train_step, validation_step
 from optimizers import MomentumOptimizer
 
+
+p50 = lambda x:np.percentile(x, 50)
+
 def add_cli_args():
     cmdline = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -66,6 +69,8 @@ def add_cli_args():
                          action='store_true', default=False)
     cmdline.add_argument('--resume_from', 
                          help='Path to SavedModel format model directory from which to resume training')
+    cmdline.add_argument('--log_frequency', 
+                         help='Frequency of training steps at which to log metrics.', type=int)
     return cmdline
 
 
@@ -178,14 +183,21 @@ def main():
         if hvd.rank() == 0:
             print('Starting training Epoch %d/%d' % (epoch, FLAGS.num_epochs))
         training_score = 0
-        for batch, (images, labels) in enumerate(tqdm(data)):
+        step_store, fwd_store, bwd_store = [], [], []
+        for batch, (images, labels) in enumerate(data):
             # momentum correction (V2 SGD absorbs LR into the update term)
             # prev_lr = opt._optimizer.learning_rate(curr_step-1)
             # curr_lr = opt._optimizer.learning_rate(curr_step)
             # momentum_correction_factor = curr_lr / prev_lr
             # opt._optimizer.momentum = opt._optimizer.momentum * momentum_correction_factor
-            loss, score = train_step(model, opt, loss_func, images, labels, batch==0 and epoch==0,
+            loss, score, step_latency, fwd_latency, bwd_latency = train_step(model, opt, loss_func, images, labels, batch==0 and epoch==0,
                             batch_size=FLAGS.batch_size, mixup_alpha=FLAGS.mixup_alpha, fp32=FLAGS.fp32)
+            step_store.append(step_latency)
+            fwd_store.append(fwd_latency)
+            bwd_store.append(bwd_latency)
+            if batch%FLAGS.log_frequency==0:
+                print('FineGrainedMetrics :: Epoch={} Step={} Rate(DataPoints/s)[p50]={:.1f} BatchSize={} Step(s/Batch)[p50]={:.2f} Fwd(s/Batch)[p50]={:.4f} Bwd(s/Batch)[p50]={:.4f}'.format(\
+                epoch, batch, FLAGS.batch_size/p50(step_store), FLAGS.batch_size, p50(step_store), p50(fwd_store), p50(bwd_store)))
             # # restore momentum
             # opt._optimizer.momentum = FLAGS.momentum
             training_score += score.numpy()
