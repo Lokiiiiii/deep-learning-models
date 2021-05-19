@@ -7,7 +7,6 @@ import argparse
 import datetime
 import random
 import logging
-from tqdm import tqdm
 from time import time
 import sys
 from models import resnet, darknet, hrnet
@@ -208,7 +207,7 @@ def main():
             print('Starting validation Epoch %d/%d' % (epoch, FLAGS.num_epochs))
         validation_score = 0
         counter = 0
-        for images, labels in tqdm(validation_data):
+        for images, labels in validation_data:
             loss, score = validation_step(images, labels, model, loss_func)
             validation_score += score.numpy()
             counter += 1
