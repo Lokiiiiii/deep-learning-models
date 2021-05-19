@@ -1,7 +1,6 @@
 import os
 import functools
 import tensorflow as tf
-import tensorflow_addons as tfa
 import horovod.tensorflow as hvd
 import numpy as np
 import argparse
